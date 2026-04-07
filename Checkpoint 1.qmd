@@ -45,7 +45,7 @@ She merged the two years into one row using the rbind function.
 
 ## RQ 1: Does plastic type composition vary systematically by region?
 
-Differences in PET vs. HDPE vs. PP across regions could reflect underlying patterns in local markets and waste infrastructure
+Differences in PET vs. HDPE vs. PP across regions could reflect underlying patterns in local markets and waste infrastructure.
 
 ## RQ 2: Do the same big brands keep showing up together in the same countries?
 
