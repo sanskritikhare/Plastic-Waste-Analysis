@@ -1,0 +1,71 @@
+---
+title: "Checkpoint 1"
+format: html
+---
+
+# Introduction
+
+This Plastic Waste dataset is provided by [Break Free From Plastic](https://www.breakfreefromplastic.org/). Sarah Sauve was volunteering for her local Zero Waste Action Team when one of her colleagues proposed a local brand audit in St. Johns to contribute to the global audit as well as a larger project that was about understanding the sources of plastic in their city. She then used the 2019 and 2020 global audit data online and did some data cleaning and wrangling to better understand the global plastic pollution issue.\
+
+Here are a few rows of the datset:
+
+```{r}
+plastics <- read.csv("C:/Users/sansk/Downloads/cal poly/sophomore year/spring 2026/STAT 431/Plastic-Waste-Analysis/plastics.csv")
+
+head(plastics)
+```
+Data from both 2019 and 2020 is included. This data was measured through volunteers physically collecting pieces of plastic and recording the type of plastic and company label. The observational unit here is one brand/company audited in one country in one year, described by the following variables:
+
+- **country:** where the brand audit was conducted
+- **year:** year of the audit, 2019 or 2020
+- **parent company:** The company whose plastic waste was counted. "Unbranded" represents plastic without a known or identifiable brand.
+- **empty:** number of unlabeled pieces of plastic
+- **hdpe:** number of High-Density Polyethylene pieces
+- **ldpe:** number of Low-Density Polyethylene pieces
+- **o:** number of "other" types of plastic pieces that don't fall into the other categories
+- **pet:** number of Polyethylene Terephthalate pieces
+- **pp:** number of Polypropylene pieces
+- **ps:** number of Polystyrene pieces
+- **pvc:** number of Polyvinyl Chloride pieces
+- **grand total:** the total count of plastic pieces across all types for that country/brand/year audit
+- **num_events:** the number of clean-up events held
+- **volunteers:** the number of volunteers who participated in the audit
+
+# Data Cleaning
+
+Sarah Sauve cleaned and wrangled the data using the tidyverse package. The raw data from the 2019 and 2020 data sets were in separate files and had inconsistencies with each other. To fix this, she did a few things to make the data set cohesive:
+
+Not every country recorded all 8 plastic types, so she wrote her own function to fill in missing values with 0's. 
+
+Since both files had their own "Grand Total" rows, she filtered them out to avoid double counting.
+
+She merged the two years into one row using the rbind function.
+
+# Explorations
+
+## RQ 1: Does plastic type composition vary systematically by region?
+
+Differences in PET vs. HDPE vs. PP across regions could reflect underlying patterns in local markets and waste infrastructure
+
+## RQ 2: Do the same big brands keep showing up together in the same countries?
+
+Major, muliti-national brands like Coca-Cola and Nestle appear across almost all countries. However, if they consistently cluster within the same countries, it could suggest that some markets are hotspots for plastic pollution, and spark the conversation of why that would be.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
