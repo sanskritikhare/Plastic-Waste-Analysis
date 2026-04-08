@@ -101,9 +101,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <section id="introduction" class="level1">
 <h1>Introduction</h1>
-<p>This Plastic Waste dataset is provided by <a href="https://www.breakfreefromplastic.org/">Break Free From Plastic</a>. Sarah Sauve was volunteering for her local Zero Waste Action Team when one of her colleagues proposed a local brand audit in St.&nbsp;Johns to contribute to the global audit as well as a larger project that was about understanding the sources of plastic in their city. She then used the 2019 and 2020 global audit data online and did some data cleaning and wrangling to better understand the global plastic pollution issue.<br>
+<p>This Plastic Waste dataset is provided by <a href="https://www.breakfreefromplastic.org/">Break Free From Plastic</a>. Sarah Sauve was volunteering for her local Zero Waste Action Team when one of her colleagues proposed a local brand audit in St.&nbsp;Johns to contribute to the global audit as well as a larger project that was about understanding the sources of plastic in their city. She then used the 2019 and 2020 global audit data online and did some data cleaning and wrangling to better understand the global plastic pollution issue. User jonthegeek then used the same raw data prepped the data set in his own way.<br>
 </p>
-<p>Here are a few rows of the datset:</p>
+<p>Here is a snippet of the data set:</p>
 <div class="cell">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>plastics <span class="ot">&lt;-</span> <span class="fu">read.csv</span>(<span class="st">"C:/Users/sansk/Downloads/cal poly/sophomore year/spring 2026/STAT 431/Plastic-Waste-Analysis/plastics.csv"</span>)</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -145,10 +145,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="data-cleaning" class="level1">
 <h1>Data Cleaning</h1>
-<p>Sarah Sauve cleaned and wrangled the data using the tidyverse package. The raw data from the 2019 and 2020 data sets were in separate files and had inconsistencies with each other. To fix this, she did a few things to make the data set cohesive:</p>
-<p>Not every country recorded all 8 plastic types, so she wrote her own function to fill in missing values with 0’s.</p>
-<p>Since both files had their own “Grand Total” rows, she filtered them out to avoid double counting.</p>
-<p>She merged the two years into one row using the rbind function.</p>
+<p>jonthegeek used janitor to clean the data. He…</p>
+<ul>
+<li>used janitor::clean_names() to standardize the column names without changing them manually,</li>
+<li>converted grand_total into a character to deal with the commas that were included in the numbers and then removed the commas,</li>
+<li>used set_names() and map_dfr() to with the .id argument to create the country column,</li>
+<li>dropped duplicate pp and ps columns using select(), and</li>
+<li>added a year column using rbind() to combine the 2019 and 2020 data into one data set.</li>
+</ul>
 </section>
 <section id="explorations" class="level1">
 <h1>Explorations</h1>
@@ -158,8 +162,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="rq-2-do-the-same-big-brands-keep-showing-up-together-in-the-same-countries" class="level2">
 <h2 class="anchored" data-anchor-id="rq-2-do-the-same-big-brands-keep-showing-up-together-in-the-same-countries">RQ 2: Do the same big brands keep showing up together in the same countries?</h2>
-<p>Major, muliti-national brands like Coca-Cola and Nestle appear across almost all countries. However, if they consistently cluster within the same countries, it could suggest that some markets are hotspots for plastic pollution, and spark the conversation of why that would be.</p>
+<p>Major, multi-national brands like Coca-Cola and Nestle appear across almost all countries. However, if they consistently cluster within the same countries, it could suggest that some markets are hotspots for plastic pollution, and spark the conversation of why that would be.</p>
 </section>
+</section>
+<section id="visualizations" class="level1">
+<h1>Visualizations</h1>
+<p><img src="RQ%201%20sketch.png" class="img-fluid"></p>
+<p><img src="RQ%202%20sketch.png" class="img-fluid"></p>
 </section>
 
 </main>
