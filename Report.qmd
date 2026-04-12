@@ -62,7 +62,6 @@ Major, multi-national brands like Coca-Cola and Nestle appear across almost all 
 library(tidyverse)
 ```
 
-
 ## Plastic type trend over time
 
 ```{r}
