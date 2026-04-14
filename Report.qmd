@@ -60,6 +60,7 @@ Major, multi-national brands like Coca-Cola and Nestle appear across almost all 
 
 ```{r}
 library(tidyverse)
+library(gt)
 ```
 
 ## How do two brands compare in terms of their global reach, and how similar are their distributions of plastic waste across countries?
@@ -93,13 +94,74 @@ compare_brands <- function(brand1, brand2) {
 
 compare_brands("The Coca-Cola Company", "PepsiCo")
 ```
+Notes: The function takes in two brands as inputs and filters the dataset separately for each one. It then groups the data by country and calculates the total plastic associated with each brand in each country. The two datasets are combined so that both brands’ values are grouped by country, and missing values are replaced with 0 to show that they weren't there. The function calculates the number of countries each brand appears in and computes a correlation coefficient to measure how similarly the two brands are distributed across countries. The Coca-Cola Company and PepsiCo had a correlation coefficient of .3598, showing that there is a weak correlation in how their plastic waste is distributed across countries.
 
-## How does the proportion of different plastic types differ across countries and change over time?
+
+## Plastic diversity index per country 
+
+```{r}
+plastic_types <- c("pet", "hdpe", "ldpe", "pp", "ps", "pvc", "o", "empty")
+
+plastics %>%
+  group_by(country) %>%
+  summarise(across(c(pet, hdpe, ldpe, pp, ps, pvc, o, empty), sum, na.rm = TRUE)) %>%
+  rowwise() %>%
+  mutate(diversity = {
+    counts <- c_across(c(pet, hdpe, ldpe, pp, ps, pvc, o, empty))
+    props <- counts / sum(counts)
+    props <- props[props > 0]
+    -sum(props * log(props))
+  }) %>%
+  select(country, diversity) %>%
+  arrange(desc(diversity))
+```
+
+I computed a plastic type diversity index for each country, which measures how evenly plastic waste is spread across the 8 plastic types in the dataset. A higher score means many plastic types were found in roughly equal amounts, while a lower score means one or two types dominated.
+The United Kingdom ranked highest with a score of 1.74, meaning its plastic waste was spread relatively evenly across many material types. Countries with lower scores tended to be dominated by PET, which makes sense given that plastic beverage bottles are one of the most commonly collected items in brand audits.
+
+
+## Plastic pollution score per company
+```{r}
+recycle_weights <- c(pet=1, hdpe=2, pp=2, ldpe=3, o=4, ps=5, pvc=5)
+
+company_pollution_score <- function(company) {
+  plastics |>
+    filter(!parent_company %in% c("Grand Total", "Unbranded", "null", "NULL"),
+           parent_company == company) |>
+    mutate(pollution_score = hdpe*2 + ldpe*3 + pet*1 + 
+                             pp*2 + ps*5 + pvc*5 + o*4) |>
+    summarize(
+      parent_company = company,
+      total_score = sum(pollution_score, na.rm = TRUE),
+      total_plastic = sum(grand_total, na.rm = TRUE),
+      avg_score_per_piece = total_score / total_plastic)
+}
+
+top_companies <- plastics |>
+  filter(!parent_company %in% c("Grand Total", "Unbranded", "null", "NULL")) |>
+  group_by(parent_company) |>
+  summarize(total = sum(grand_total, na.rm = TRUE)) |>
+  slice_max(total, n = 10) |>
+  pull(parent_company)
+
+map(top_companies, company_pollution_score) |>
+  bind_rows() |>
+  arrange(desc(total_score)) |>
+  gt::gt()
+```
+
+Notes: I created `pollution_score` column by multiplying each plastic type’s count by a recycling difficulty weight. I wrote  a custom function `company_pollution_score()` that takes a company name as input, applies the weights, and returns the total score, total plastic count, and average score per piece. I used `map()` to iterate this function over the top 10 companies by total plastic and combined the results with `bind_rows()`.
+
+With this data, the ranking of companies changes depending on total_score or average score per piece.  The Coca-Cola Company has the highest total score due to sheer volume, but a relatively low average score per piece of 1.13. In contrast, Unilever has a higher average score per piece, meaning the plastic they produce is harder to recycle even if their total volume is lower. 
+
+
+## Plastic type trend over time
 
 ```{r}
 plastic_type <- c("hdpe", "ldpe", "o", "pet", "pp", "ps", "pvc")
+
 results <- map_dfr(plastic_type, function(p){
-  plastics %>% group_by(country, year) %>%
+  plastic %>% group_by(country, year) %>%
     summarize(
       total_plastic_per_year_country = sum(grand_total, na.rm = TRUE),
       type_count = sum(.data[[p]], na.rm = TRUE),
@@ -117,30 +179,12 @@ results <- results %>%
 results %>%
   mutate(across(-c(country, year, total_plastic_per_year_country), ~ round(.x, 3)))
 results
-```
 
 ```
 
-## Plastic type trend over time
+Notes: I grouped the data by country and year, summed the total plastic and the total of plastic type, and then calculated proportions. I used map() to iterate through each plastic type and combined the results, then reshaped the data to compare types side by side.
 
-```{r}
-plastic_types <- c("pet", "hdpe", "ldpe", "pp", "ps", "pvc", "o", "empty")
-
-proportions <- plastics %>%
-  group_by(year) %>%
-  summarise(across(plastic_types, sum, na.rm = TRUE),
-            total_all = sum(grand_total, na.rm = TRUE))
-
-map(plastic_types, \(plastic) {
-  tibble(
-    plastic_type = plastic,
-    prop_2019 = proportions[[plastic]][proportions$year == 2019] / proportions$total_all[proportions$year == 2019],
-    prop_2020 = proportions[[plastic]][proportions$year == 2020] / proportions$total_all[proportions$year == 2020]
-  ) %>%
-    mutate(direction = if_else(prop_2020 > prop_2019, "increased", "decreased"))
-}) %>%
-  bind_rows()
-```
+Through this data, I can see that for each country and year, a few specific plastic types make up most of the total plastic waste, rather than contributing equally. For example, in Armenia in 2020, the plastic type pet made up all of the country's plastic waste
 
 
 
