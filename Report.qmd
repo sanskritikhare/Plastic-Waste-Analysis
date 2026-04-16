@@ -12,8 +12,10 @@ library(httr)
 library(tidyjson)
 library(jsonlite)
 library(tidyverse)
+library(gt)
 library(glue)
-
+library(purrr)
+library(tidyr)
 ```
 
 # Introduction
@@ -70,11 +72,6 @@ Major, multi-national brands like Coca-Cola and Nestle appear across almost all 
 ![](RQ 2 sketch.png)
 
 # Checkpoint 2
-
-```{r}
-library(tidyverse)
-library(gt)
-```
 
 ## How do two brands compare in terms of their global reach, and how similar are their distributions of plastic waste across countries?
 
@@ -202,7 +199,7 @@ Through this data, I can see that for each country and year, a few specific plas
 
 ## Checkpoint 3
 
-# New data: Country Capitals
+# New data: [Country Capitals](https://www.kaggle.com/datasets/nikitagrec/world-capitals-gps?resource=download)
 
 **Description: **
 
@@ -215,29 +212,69 @@ head(country_data)
 
 ```
 
-We only need the capital city names and country that they belong to, so we'll remove the other columns and combine it with our Plastic Waste data set.
+Below, we remove the unnecessary columns, keeping the country, capital, and coordinates, and then combine the new data with our existing Plastic Waste data set.
 
 ```{r}
 
 capitals <- country_data |>
-  select("CountryName", "CapitalName") |>
-  rename("country" = "CountryName", "capital_city" = "CapitalName")
+  select(c(1:4)) |>
+  rename("country" = "CountryName", 
+         "capital_city" = "CapitalName",
+         "capital_lat" = "CapitalLatitude",
+         "capital_long" = "CapitalLongitude"
+         )
   
 pollution_data <- left_join(plastics, capitals, by = "country")
 
 ```
 
-# New Data: Air Quality API
+# New Data: [Air Quality API](https://api-ninjas.com/api/airquality)
 
 **Description: **
 
+
 ```{r}
+#| eval: false
 
-
+api_key <- "8WgZLi4HWZgdRb41628puOGlpbB1OOu1PT7nMJF3"
 
 ```
 
+```{r}
 
+get_air_quality <- function(lat, lon) {
+  
+  base_url <- "https://api.api-ninjas.com/v1/airquality"
+  
+  my_url <- glue("{base_url}?lat={lat}&lon={lon}")
+  
+  my_city <- GET(
+    my_url,
+    add_headers("X-Api-Key" = api_key)
+  )
+  
+   # Sys.sleep(1)
+  
+  my_data <- fromJSON(rawToChar(my_city$content))
+  
+  return (my_data)
+}
+
+safe_air_quality <- possibly(get_air_quality, otherwise = NA)
+
+air_data <- pollution_data |>
+  mutate(
+    air_quality = map2(capital_lat, capital_long, safe_air_quality)
+  )
+
+```
+
+```{r}
+air_data <- air_data |>
+  unnest_wider(air_quality)
+
+pollution_data <- left_join(pollution_data, air_data, by = "country")
+```
 
 
 
