@@ -3,6 +3,19 @@ title: "Checkpoint 1"
 format: html
 ---
 
+```{r}
+#| label: package-setup
+#| message: false
+#| warning: false
+
+library(httr)
+library(tidyjson)
+library(jsonlite)
+library(tidyverse)
+library(glue)
+
+```
+
 # Introduction
 
 This Plastic Waste dataset is provided by [Break Free From Plastic](https://www.breakfreefromplastic.org/). Sarah Sauve was volunteering for her local Zero Waste Action Team when one of her colleagues proposed a local brand audit in St. Johns to contribute to the global audit as well as a larger project that was about understanding the sources of plastic in their city. She then used the 2019 and 2020 global audit data online and did some data cleaning and wrangling to better understand the global plastic pollution issue. User jonthegeek then used the same raw data prepped the data set in his own way.\
@@ -161,7 +174,7 @@ With this data, the ranking of companies changes depending on total_score or ave
 plastic_type <- c("hdpe", "ldpe", "o", "pet", "pp", "ps", "pvc")
 
 results <- map_dfr(plastic_type, function(p){
-  plastic %>% group_by(country, year) %>%
+  plastics %>% group_by(country, year) %>%
     summarize(
       total_plastic_per_year_country = sum(grand_total, na.rm = TRUE),
       type_count = sum(.data[[p]], na.rm = TRUE),
@@ -187,8 +200,42 @@ Notes: I grouped the data by country and year, summed the total plastic and the 
 Through this data, I can see that for each country and year, a few specific plastic types make up most of the total plastic waste, rather than contributing equally. For example, in Armenia in 2020, the plastic type pet made up all of the country's plastic waste
 
 
+## Checkpoint 3
+
+# New data: Country Capitals
+
+**Description: **
 
 
+Here's a snippet of the data set:
+```{r}
+
+country_data <- read_csv("concap.csv")
+head(country_data)
+
+```
+
+We only need the capital city names and country that they belong to, so we'll remove the other columns and combine it with our Plastic Waste data set.
+
+```{r}
+
+capitals <- country_data |>
+  select("CountryName", "CapitalName") |>
+  rename("country" = "CountryName", "capital_city" = "CapitalName")
+  
+pollution_data <- left_join(plastics, capitals, by = "country")
+
+```
+
+# New Data: Air Quality API
+
+**Description: **
+
+```{r}
+
+
+
+```
 
 
 
