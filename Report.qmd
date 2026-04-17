@@ -228,6 +228,7 @@ pollution_data <- left_join(plastics, capitals, by = "country")
 
 ```
 
+
 # New Data: [Air Quality API](https://api-ninjas.com/api/airquality)
 
 **Description: **
@@ -240,8 +241,11 @@ api_key <- "sTJzlVHjhVz3wlHNpJ2o776nyWC1UwN1KippCFdE"
 
 ```
 
+We made a custom function get_air_quality() that pulls air quality data for a city from the API using its latitude and longitude coordinates. We then used the map() function to iterate over each capital city from the Capital Cities data set from above.
+
 ```{r}
 
+# function to pull data from API
 get_air_quality <- function(lat, lon) {
   
   base_url <- "https://api.api-ninjas.com/v1/airquality"
@@ -253,8 +257,7 @@ get_air_quality <- function(lat, lon) {
     add_headers("X-Api-Key" = api_key)
   )
   
-  Sys.sleep(1)
-  
+  # Check for successful response
   if (status_code(my_city) != 200) return(NA)
   
   my_data <- fromJSON(rawToChar(my_city$content))
@@ -262,19 +265,42 @@ get_air_quality <- function(lat, lon) {
   return (my_data)
 }
 
+# to prevent crashing in case of failed API value
 safe_air_quality <- possibly(get_air_quality, otherwise = NA)
 
+# iterate function for all capital cities
 unique_capitals <- pollution_data |> 
   distinct(country, capital_lat, capital_long) |> 
   filter(!is.na(capital_lat), !is.na(capital_long)) 
 
+# create tibble of air quality data
 air_data <- unique_capitals |> 
-  mutate( air_quality = map2(capital_lat, capital_long, safe_air_quality) ) |> 
-  unnest_wider(air_quality) 
-
-pollution_data <- left_join(pollution_data, air_data, by = "country") 
+  mutate(
+    air_quality = map2(capital_lat, capital_long, safe_air_quality)
+    ) |> 
+  unnest_wider(air_quality)
 
 ```
+
+Since the air quality data is stored in list objects that store the concentration and AQI, we need to separate those for analysis. Then, we combine it with the pollution_data to create our final "meta" data set.
+```{r}
+
+# separate list objects into "pollutant"_concentration" and "pollutant"_aqi columns
+air_data <- air_data |>
+  unnest_wider(CO, names_sep = "_") |>
+  unnest_wider(NO2, names_sep = "_") |>
+  unnest_wider(O3, names_sep = "_") |>
+  unnest_wider(PM10, names_sep = "_") |>
+  unnest_wider(`PM2.5`, names_sep = "_") |>
+  unnest_wider(SO2, names_sep = "_") |>
+  select(-capital_lat, -capital_long)
+
+# combine
+pollution_data <- left_join(pollution_data, air_data, by = "country")
+
+
+```
+
 
 
 
