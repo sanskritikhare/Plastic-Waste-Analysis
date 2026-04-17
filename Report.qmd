@@ -16,6 +16,7 @@ library(gt)
 library(glue)
 library(purrr)
 library(tidyr)
+library(readr)
 ```
 
 # Introduction
@@ -234,16 +235,10 @@ pollution_data <- left_join(plastics, capitals, by = "country")
 **Description: **
 
 
-```{r}
-#| eval: false
-
-api_key <- "sTJzlVHjhVz3wlHNpJ2o776nyWC1UwN1KippCFdE"
-
-```
-
 We made a custom function get_air_quality() that pulls air quality data for a city from the API using its latitude and longitude coordinates. We then used the map() function to iterate over each capital city from the Capital Cities data set from above.
 
 ```{r}
+#| eval: false
 
 # function to pull data from API
 get_air_quality <- function(lat, lon) {
@@ -280,11 +275,6 @@ air_data <- unique_capitals |>
     ) |> 
   unnest_wider(air_quality)
 
-```
-
-Since the air quality data is stored in list objects that store the concentration and AQI, we need to separate those for analysis. Then, we combine it with the pollution_data to create our final "meta" data set.
-```{r}
-
 # separate list objects into "pollutant"_concentration" and "pollutant"_aqi columns
 air_data <- air_data |>
   unnest_wider(CO, names_sep = "_") |>
@@ -295,9 +285,18 @@ air_data <- air_data |>
   unnest_wider(SO2, names_sep = "_") |>
   select(-capital_lat, -capital_long)
 
+# create .csv file for air_data
+write_csv(air_data, "air_data.csv")
+
+```
+
+```{r}
+# read in air_data
+air_data <- read_csv(file = "air_data.csv")
+
 # combine
 pollution_data <- left_join(pollution_data, air_data, by = "country")
-
+pollution_data
 
 ```
 
