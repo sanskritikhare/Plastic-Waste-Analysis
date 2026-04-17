@@ -212,7 +212,7 @@ head(country_data)
 
 ```
 
-Below, we remove the unnecessary columns, keeping the country, capital, and coordinates, and then combine the new data with our existing Plastic Waste data set.
+Below, we remove the unnecessary columns, keeping the country, capital, and coordinates columns, and then combine the new data with our existing Plastic Waste data set.
 
 ```{r}
 
@@ -236,7 +236,7 @@ pollution_data <- left_join(plastics, capitals, by = "country")
 ```{r}
 #| eval: false
 
-api_key <- "8WgZLi4HWZgdRb41628puOGlpbB1OOu1PT7nMJF3"
+api_key <- "sTJzlVHjhVz3wlHNpJ2o776nyWC1UwN1KippCFdE"
 
 ```
 
@@ -253,7 +253,9 @@ get_air_quality <- function(lat, lon) {
     add_headers("X-Api-Key" = api_key)
   )
   
-   # Sys.sleep(1)
+  Sys.sleep(1)
+  
+  if (status_code(my_city) != 200) return(NA)
   
   my_data <- fromJSON(rawToChar(my_city$content))
   
@@ -262,19 +264,19 @@ get_air_quality <- function(lat, lon) {
 
 safe_air_quality <- possibly(get_air_quality, otherwise = NA)
 
-air_data <- pollution_data |>
-  mutate(
-    air_quality = map2(capital_lat, capital_long, safe_air_quality)
-  )
+unique_capitals <- pollution_data |> 
+  distinct(country, capital_lat, capital_long) |> 
+  filter(!is.na(capital_lat), !is.na(capital_long)) 
+
+air_data <- unique_capitals |> 
+  mutate( air_quality = map2(capital_lat, capital_long, safe_air_quality) ) |> 
+  unnest_wider(air_quality) 
+
+pollution_data <- left_join(pollution_data, air_data, by = "country") 
 
 ```
 
-```{r}
-air_data <- air_data |>
-  unnest_wider(air_quality)
 
-pollution_data <- left_join(pollution_data, air_data, by = "country")
-```
 
 
 
