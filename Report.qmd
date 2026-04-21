@@ -1,5 +1,5 @@
 ---
-title: "Checkpoint 1"
+title: "Report"
 format: html
 ---
 
@@ -198,12 +198,12 @@ Notes: I grouped the data by country and year, summed the total plastic and the 
 Through this data, I can see that for each country and year, a few specific plastic types make up most of the total plastic waste, rather than contributing equally. For example, in Armenia in 2020, the plastic type pet made up all of the country's plastic waste
 
 
-## Checkpoint 3
+# Checkpoint 3
 
-# New data: [Country Capitals](https://www.kaggle.com/datasets/nikitagrec/world-capitals-gps?resource=download)
+## New data: [Country Capitals](https://www.kaggle.com/datasets/nikitagrec/world-capitals-gps?resource=download)
 
 **Description: **
-
+This data contains geographical information for countries and their capital cities worldwide. It includes the country name, country code, capital city name, and the latitude and longitude coordinates of each capital. We will use this data as a bridge dataset to connect our plastic pollution data to the air quality API, which requires geographic cooordinates as input. 
 
 Here's a snippet of the data set:
 ```{r}
@@ -230,10 +230,10 @@ pollution_data <- left_join(plastics, capitals, by = "country")
 ```
 
 
-# New Data: [Air Quality API](https://api-ninjas.com/api/airquality)
+## New Data: [Air Quality API](https://api-ninjas.com/api/airquality)
 
 **Description: **
-
+This dataset was acquired using the API Ninjas Air Quality API and returns current air quality measurements for a given latitude and longitude. For each country's capital city, the API returned measurements for several pollutants including CO, NO2, O3, PM2.5, PM10, and SO2, as well as an overall AQI (Air Quality Index) score. With this data, we can investigate whether countries with higher levels of plastic pollution also tend to have worse air quality, potentially reflecting broader environmental mismanagement. 
 
 We made a custom function get_air_quality() that pulls air quality data for a city from the API using its latitude and longitude coordinates. We then used the map() function to iterate over each capital city from the Capital Cities data set from above.
 
@@ -300,9 +300,55 @@ pollution_data
 
 ```
 
+## Summary 1
+
+** Description: **
+We want to investigate whether countries with more plastic pollution also tend to have worse air quality. We grouped the meta dataset by country and computed the total plastic collected and average overall AQI score for each country. The table displays the top 10 countries by total plastic collected along with their corresponding air quality index, where a higher AQI indicates worse air quality. This allows us to see whether the most plastic-polluted countries also tend to have a poorer air quality. 
+
+```{r}
+air_vs_plastic <- pollution_data |>
+  filter(!parent_company %in% c("Grand Total", "Unbranded", "null", "NULL")) |>
+  group_by(country) |>
+  summarize(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    total_volunteers = sum(volunteers, na.rm = TRUE),
+    avg_aqi = mean(overall_aqi, na.rm = TRUE)) |>
+  filter(!is.na(avg_aqi), total_plastic > 0) |>
+  arrange(desc(total_plastic))
+
+air_vs_plastic |>
+  slice_max(total_plastic, n = 10)
 
 
+```
 
+Notes: We filtered out non-company rows such as "Grand Total" and "NULL"entries, then grouped by country and computed the total plastic collected, total volunteers, and average AQI score for each country using `summarize()`. Countries with missing AQI data or zero plastic collected were removed using `filter()`, results were sorted in descending order by total plastic using `arrange()`, and we displayed the top 10 countries using `slice_max()`.
+
+The results show no clear consistent pattern as the Philippines leads in both plastic collected and has a high AQI of 192, while Nigeria ranks second in plastic but has a very low AQI of 21. This suggests that plastic pollution and air quality are influenced by different factors across countries.
+
+## Visualization 2
+
+** Description: **
+Description: I wanted to see the relationship between average air quality and total plastic waste across countries. We saw in the previous summary that there was not a consistent pattern between plastic pollution and air quality. However, I wanted to see if overall countries with higher levels of plastic pollution also tend to have worse air quality using a a scatter plot and a linear model.
+
+```{r}
+ggplot(air_vs_plastic, aes(x = total_plastic, y = avg_aqi)) + 
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) + 
+  labs(
+    title = "Plastic Waste vs Average AQI by Country",
+    x = "Total Plastic Waste",
+    y = "Average AQI"
+  ) +
+  theme_minimal()
+
+model <- lm(avg_aqi ~ total_plastic, data = air_vs_plastic)
+summary(model)
+
+
+```
+
+Notes: The scatterplot shows that there is very little relationship between total plastic waste and average AQI across countries. Even thought the fitted regression line has a slight negative slope, it is almost flat, which shows that plastic waste is not a very good predictor of air quality. The linear model confirmas this through the large p-value of 0.888 and the coefficient for total_plastic being very close to zero which shows that the relationship is not statistically significant. Also, the R-squared value is very small, which means that total plastic waste explains almost none of the variation in average AQI across countries. These results suggest that plastic waste and air quality do not appear to have a meaningful linear relationship at the country level in this sample.
 
 
 
