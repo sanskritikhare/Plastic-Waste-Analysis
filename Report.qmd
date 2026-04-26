@@ -17,6 +17,8 @@ library(glue)
 library(purrr)
 library(tidyr)
 library(readr)
+library(hexbin)
+library(ggplot2)
 ```
 
 # Introduction
@@ -296,7 +298,7 @@ air_data <- read_csv(file = "air_data.csv")
 
 # combine
 pollution_data <- left_join(pollution_data, air_data, by = "country")
-pollution_data
+head(pollution_data)
 
 ```
 
@@ -332,6 +334,7 @@ The results show no clear consistent pattern as the Philippines leads in both pl
 Description: I wanted to see the relationship between average air quality and total plastic waste across countries. We saw in the previous summary that there was not a consistent pattern between plastic pollution and air quality. However, I wanted to see if overall countries with higher levels of plastic pollution also tend to have worse air quality using a a scatter plot and a linear model.
 
 ```{r}
+
 ggplot(air_vs_plastic, aes(x = total_plastic, y = avg_aqi)) + 
   geom_point() +
   geom_smooth(method = "lm", se = FALSE) + 
@@ -342,16 +345,152 @@ ggplot(air_vs_plastic, aes(x = total_plastic, y = avg_aqi)) +
   ) +
   theme_minimal()
 
-model <- lm(avg_aqi ~ total_plastic, data = air_vs_plastic)
-summary(model)
-
 
 ```
 
 Notes: The scatterplot shows that there is very little relationship between total plastic waste and average AQI across countries. Even thought the fitted regression line has a slight negative slope, it is almost flat, which shows that plastic waste is not a very good predictor of air quality. The linear model confirmas this through the large p-value of 0.888 and the coefficient for total_plastic being very close to zero which shows that the relationship is not statistically significant. Also, the R-squared value is very small, which means that total plastic waste explains almost none of the variation in average AQI across countries. These results suggest that plastic waste and air quality do not appear to have a meaningful linear relationship at the country level in this sample.
 
+# Checkpoint 4
+
+## Visualization 1
+
+**Description:**
+I wanted to see the relationship between average air quality and total plastic waste across countries. We saw in the previous summary that there was a relationship between air quality and total plastic. There were a lot of outliers, so in this graph, I wanted to adjust for the outliers by getting rid of the outliers in total plastic. I wanted to see if overall countries with higher levels of plastic pollution also tend to have worse air quality using a hexbin plot and a linear model after adjusting for outliers.
+
+Is plastic waste associated with air quality across countries?
 
 
+```{r}
+windowsFonts(Arial = windowsFont("Arial"))
+
+Q1 <- quantile(air_vs_plastic$total_plastic, 0.25)
+Q3 <- quantile(air_vs_plastic$total_plastic, 0.75)
+IQR <- Q3 - Q1
+
+ggplot(data = air_vs_plastic |> 
+         filter(
+           total_plastic >= Q1 - 1.5 * IQR, 
+           total_plastic <= Q3 + 1.5 * IQR), 
+       aes(x = total_plastic, y = avg_aqi)
+       ) +
+  geom_point(aes(color = avg_aqi), size = 3, alpha = 0.7, color = "darkgreen") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(
+    title = "Association between Plastic Waste and Air Quality across Countries",
+    subtitle = "Each point represents one country. The red line shows the linear trend",
+    x = "Total Plastic Waste",
+    y = "Average Air Quality Index (AQI)",
+    alt = "Scatter plot showing the relationship between total plastic waste and average air quality index    across countries. Each point represents a country. A red linear trend line slopes slightly downward, showing  a weak negative relationship between plastic waste and air quality."
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial"),
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(colour = "black", size = 11),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+  )
+
+
+```
+
+## Model
+
+```{r}
+model <- lm(avg_aqi ~ total_plastic, data = air_vs_plastic)
+summary_model <- summary(model)
+
+r_squared <- round(summary_model$r.squared, 4)
+adj_r_squared <- round(summary_model$adj.r.squared, 4)
+f_stat <- round(summary_model$fstatistic[1], 3)
+p_value_model <- round(pf(summary_model$fstatistic[1], 
+                          summary_model$fstatistic[2], 
+                          summary_model$fstatistic[3], 
+                          lower.tail = FALSE), 4)
+
+data.frame(
+  Term = c("Intercept", "Total Plastic"),
+  Estimate = coef(model),
+  Standard_Error = summary_model$coefficients[, 2],
+  T_Statistic = summary_model$coefficients[, 3],
+  P_Value = summary_model$coefficients[, 4]
+) |>
+  gt() |>
+  opt_table_font(font = "Arial") |>
+  tab_header(
+    title = "Linear Regression Results",
+    subtitle = "Predicting Average AQI from Total Plastic Waste by Country"
+  ) |>
+  tab_spanner(
+    label = "Coefficient Information",
+    columns = c(Estimate, Standard_Error)
+  ) |>
+  tab_spanner(
+    label = "Test Statistics",
+    columns = c(T_Statistic, P_Value)
+  ) |>
+  cols_label(
+    Term = "Term",
+    Estimate = "Estimate",
+    Standard_Error = "Standard Error",
+    T_Statistic = "T-Statistic",
+    P_Value = "P-Value"
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  fmt_number(columns = c(Estimate, Standard_Error, T_Statistic), decimals = 3) |>
+  fmt_number(columns = P_Value, decimals = 4) |>
+  tab_source_note(glue::glue("R² = {r_squared} | Adjusted R² = {adj_r_squared} | F-statistic = {f_stat} | Model p-value = {p_value_model}"))
+
+```
+
+## Visualization 2
+
+**Description:**
+I wanted to see which multinational brands appear most consistently across countries in the global plastic audit data. Building off our research question regarding whether the same big brands keep showing up together, I first wanted to establish which brands have the widest geographic reach before exploring co-occurrence patterns. I made a chart to show both how many countries each brand appears in and how much total plastic they contribute, allowing two dimensions to be read in a single clean graphic.
+
+Do the same big brands keep showing up across countries?
+
+```{r}
+brand_reach <- plastics |>
+  filter(!parent_company %in% c("Grand Total", "Unbranded", "null", "NULL")) |>
+  group_by(parent_company) |>
+  summarise(n_countries = n_distinct(country),
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    .groups = "drop") |>
+  slice_max(n_countries, n = 15) |>
+  mutate(parent_company = reorder(parent_company, n_countries))
+
+ggplot(brand_reach, aes(x = n_countries, y = parent_company)) +
+  geom_segment(aes(x = 0, xend = n_countries,
+                   y = parent_company, yend = parent_company),
+               color = "grey85", linewidth = 0.8) +
+  geom_point(aes(colour = total_plastic), size = 4) +
+  scale_colour_gradient(
+    low = "mistyrose", high = "deeppink",
+    labels = scales::comma,
+    name = "Total Plastic Collected"
+  ) +
+  labs(
+    title = "Multinational Brands Dominate Global Plastic Pollution",
+    subtitle = "Top 15 Brands by Number of Countries Present in 2019–2020",
+    x = "Number of countries",
+    y = "Parent Companies",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(colour = "darkgrey", size = 11),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank()
+  )
+
+```
+**Notes:**
+The chart displays the top 15 brands by number of countries they appear in across the 2019–2020 Break Free From Plastic brand audits. Each horizontal segment extends from zero to the number of countries that brand was recorded in, and the dot at the end is colored by total plastic collected (light pink indicating lower volume and hot pink indicating higher volume). I filtered out non-company entries such as "Grand Total" and "Unbranded", then grouping by parent_company and computing both n_distinct(country) and sum(grand_total) using `summarise()`. The Coca-Cola Company stands out clearly as both the most geographically widespread brand and the largest plastic polluter by volume, appearing in over 60 countries with a notably darker dot than all others. Interestingly, several brands like Mondelez International and Mars, Incorporated share a similar country count around 42 but with relatively low plastic volume, suggesting wide reach does not always correspond to high pollution output. Together, the chart confirms that a small set of multinational corporations consistently dominates plastic pollution across the globe. 
 
 
 
