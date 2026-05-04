@@ -1,0 +1,591 @@
+---
+title: "Project 2"
+format:
+  dashboard:
+    theme: cosmo
+    logo: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQTZuRREjunyFKk2gbvmSMWHEYi_KaBkjgR4w&s"
+    nav-buttons:
+      - icon: linkedin
+        href: https://linkedin.com
+        aria-label: LinkedIn
+      - icon: instagram
+        href: https://instagram.com
+        aria-label: Instagram
+      - icon: twitter-x
+        href: https://twitter.com
+        aria-label: Twitter/X
+embed-resources: true
+---
+
+```{r}
+#| label: package-setup
+#| message: false
+#| warning: false
+
+library(httr)
+library(tidyjson)
+library(jsonlite)
+library(tidyverse)
+library(gt)
+library(glue)
+library(purrr)
+library(tidyr)
+library(readr)
+library(hexbin)
+library(ggplot2)
+```
+
+# Overview
+
+## Column {height="60%"}
+
+### Introduction
+
+My dataset is the [Break Free From Plastic (BFFP)](https://github.com/rfordatascience/tidytuesday/blob/main/data/2021/2021-01-26/readme.mdz) from TidyTuesdays. This dataset looks at plastic waste collected during cleanup events around the world, where volunteers record variables like the country, year, parent company responsible, and counts of different plastic types.
+
+The data comes from Break Free From Plastic global brand audits, which are organized to better understand where plastic pollution is coming from and to hold companies accountable. The dataset I'm using was put together by Sarah Sauve, who combined data from the 2019 and 2020 audits into one dataset. You find it [here](https://github.com/sarahsauve/TidyTuesdays/blob/master/BFFPDashboard/BlogPost.md).
+
+She also created a blog post and a Shiny app describing her data cleaning process and analysis. She made it to contribute to global audit, and as a way to understand plastic waste in St. John.
+
+Each observation represents a summary of plastic collected for a specific company, in a specific country, and year. The values in each row are counts of different types of plastic for each company.
+
+The different types of plastic are numeric, and they can be anywhere from 0 to a few hundred, depending on how common the material is.
+
+The data was collected to better understand where plastic pollution is coming from and to help hold companies accountable for their plastic waste. We are interested in it because it allows us to identify which companies and countries contribute the most to plastic pollution, and to examine how the composition of plastic types varies across countries and over time.
+
+**Variables:**
+
+-   **country:** where the brand audit was conducted
+-   **year:** year of the audit, 2019 or 2020
+-   **parent company:** The company whose plastic waste was counted. "Unbranded" represents plastic without a known or identifiable brand.
+-   **empty:** number of unlabeled pieces of plastic
+-   **hdpe:** number of High-Density Polyethylene pieces
+-   **ldpe:** number of Low-Density Polyethylene pieces
+-   **o:** number of "other" types of plastic pieces that don't fall into the other categories
+-   **pet:** number of Polyethylene Terephthalate pieces
+-   **pp:** number of Polypropylene pieces
+-   **ps:** number of Polystyrene pieces
+-   **pvc:** number of Polyvinyl Chloride pieces
+-   **grand total:** the total count of plastic pieces across all types for that country/brand/year audit
+-   **num_events:** the number of clean-up events held
+-   **volunteers:** the number of volunteers who participated in the audit
+
+### Data Cleaning
+
+jonthegeek used janitor to clean the data. He...
+
+-   used janitor::clean_names() to standardize the column names without changing them manually,
+-   converted grand_total into a character to deal with the commas that were included in the numbers and then removed the commas,
+-   used set_names() and map_dfr() to with the .id argument to create the country column,
+-   dropped duplicate pp and ps columns using select(), and
+-   added a year column using rbind() to combine the 2019 and 2020 data into one data set.
+
+## Column {height="40%"}
+
+### Data Snapshot
+
+```{r}
+tuesdata <- tidytuesdayR::tt_load('2021-01-26')
+tuesdata <- tidytuesdayR::tt_load(2021, week = 5)
+
+plastics <- tuesdata$plastics
+
+head(plastics)
+```
+
+# Explorations
+
+## Column
+
+### Multinational Brands Dominate Global Plastic Pollution
+
+```{r}
+brand_reach <- plastics |>
+  filter(!parent_company %in% c("Grand Total", "Unbranded", "null", "NULL")) |>
+  group_by(parent_company) |>
+  summarise(n_countries = n_distinct(country),
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    .groups = "drop") |>
+  slice_max(n_countries, n = 15) |>
+  mutate(parent_company = reorder(parent_company, n_countries))
+
+ggplot(brand_reach, aes(x = n_countries, y = parent_company)) +
+  geom_segment(aes(x = 0, xend = n_countries,
+                   y = parent_company, yend = parent_company),
+               color = "grey85", linewidth = 0.8) +
+  geom_point(aes(colour = total_plastic), size = 4) +
+  scale_colour_gradient(
+    low = "mistyrose", high = "deeppink",
+    labels = scales::comma,
+    name = "Total Plastic Collected"
+  ) +
+  labs(
+    title = "Multinational Brands Dominate Global Plastic Pollution",
+    subtitle = "Top 15 Brands by Number of Countries Present in 2019–2020",
+    x = "Number of countries",
+    y = "Parent Companies",
+    alt = "Lollipop chart showing the top 15 multinational brands by number of countries they appear in across 2019 and 2020 plastic audits. Each horizontal segment extends from zero to the number of countries, with a dot colored by total plastic collected ranging from light pink for lower volume to hot pink for higher volume. The Coca-Cola Company appears in the most countries and has the darkest dot indicating the highest total plastic collected."
+  ) + 
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(colour = "darkgrey", size = 11),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank()
+  )
+```
+
+### Plastic Type Proportions by Country Over Time
+
+```{r}
+plastic_types <- c("hdpe", "ldpe", "o", "pet", "pp", "ps", "pvc")
+
+get_proportion <- function(p) {
+  plastics |>
+    group_by(country, year) |>
+    summarize(
+      total_plastic = sum(grand_total, na.rm = TRUE),
+      type_count = sum(.data[[p]], na.rm = TRUE),
+      .groups = "drop") |>
+    mutate(
+      plastic_type = p,
+      proportion = type_count / total_plastic)
+}
+
+top_countries <- plastics |>
+  filter(!parent_company %in% c("Grand Total", "Unbranded", "null", "NULL")) |>
+  group_by(country) |>
+  summarize(total = sum(grand_total, na.rm = TRUE)) |>
+  slice_max(total, n = 5) |>
+  pull(country)
+
+map_dfr(plastic_types, get_proportion) |>
+  filter(country %in% top_countries) |>
+  ggplot(aes(x = plastic_type, y = proportion, fill = country)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ year) +
+  labs(
+    title = "Plastic Type Proportions by Country Over Time",
+    x = "Plastic Type",
+    y = "Proportion of Total Plastic",
+    fill = "Country",
+    alt = "Faceted bar chart showing the proportion of each plastic type collected in the top 5 polluting countries in 2019 and 2020. PET dominates across most countries and both years. Each country is represented by a different color. The chart is split into two panels, one for 2019 and one for 2020, allowing us to compare plastic type distributions over time."
+  ) +
+  scale_fill_brewer(palette = "wesanderson") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    strip.text = element_text(face = "bold")
+  )
+```
+
+## Column
+
+### Summary Tables
+
+::: panel-tabset
+
+## Pollution Scores by Company
+
+This summary table shows which companies have the highest plastic pollution score based on recycling difficulty, and I want to see if they overlap with the brands most present across countries. I came up with these weights through an article from the US Department of Energy <https://www.energy.gov/sites/default/files/2021-12/ES_ConsumerGuide_RecyclingCodes.pdf>
+
+Table 1: shows which companies have the highest plastic pollution score based on recycling difficulty
+
+```{r}
+recycle_weights <- c(pet=1, hdpe=2, pvc=3, o=4, pp=5, ps=6, ldpe=7)
+
+top_companies <- plastics |>
+  filter(!parent_company %in% c("Grand Total", "Unbranded", "null", "NULL")) |>
+  group_by(parent_company) |>
+  summarize(total = sum(grand_total, na.rm = TRUE)) |>
+  slice_max(total, n = 10) |>
+  pull(parent_company)
+
+plastics |>
+  filter(parent_company %in% top_companies) |>
+  mutate(pollution_score = pet*1 + hdpe*2 + pvc*3 + o*4 + pp*5 + ps*6 + ldpe*7) |>
+
+  group_by(parent_company) |>
+  summarize(
+    total_score = sum(pollution_score, na.rm = TRUE),
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    avg_score_per_piece = total_score / total_plastic) |>
+  arrange(desc(total_score)) |>
+  gt::gt() |>
+  tab_header(
+    title = "Plastic Pollution Scores by Company",
+    subtitle = "Top 10 companies ranked by weighted recycling difficulty score"
+  ) |>
+  cols_label(
+    parent_company = "Company",
+    total_score = "Total Score",
+    total_plastic = "Total Plastic",
+    avg_score_per_piece = "Avg Score Per Piece"  # make sure this matches exactly
+  ) |>
+  fmt_number(columns = c(total_score, total_plastic), decimals = 0) |>
+  fmt_number(columns = avg_score_per_piece, decimals = 2) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()) |>
+  tab_source_note("Source: Break Free From Plastic brand audit data (2019-2020). Weights based on recycling rates: PET(1), HDPE(2), PVC(3), Other(4), PP(5), PS(6), LDPE(7) from the US Department of Energy") 
+```
+
+## Plastic Types by Country & Year
+
+Here, I wanted see how the proportion of different plastic types differ across countries and changed over time.
+
+Table 2: shows the proportion of each plastic type collected per country for both 2019 and 2020
+
+```{r}
+map_dfr(plastic_types, get_proportion) |>
+  select(country, year, total_plastic, plastic_type, proportion) |>
+  pivot_wider(names_from = plastic_type, values_from = proportion) |>
+  mutate(across(-c(country, year, total_plastic), ~ round(.x, 3))) |>
+  pivot_wider(names_from = year, 
+              values_from = c(hdpe, ldpe, o, pet, pp, ps, pvc, total_plastic),
+              names_sep = "_") |>
+  filter(!is.na(total_plastic_2019) & !is.na(total_plastic_2020))|>
+  slice_head(n = 10) |> 
+  gt::gt() |>
+  tab_header(
+    title = "Proportion of Plastic Types by Country and Year",
+    subtitle = "Each value represents the share of total plastic for that type"
+  ) |>
+  tab_spanner(label = "2019", columns = ends_with("_2019")) |>
+  tab_spanner(label = "2020", columns = ends_with("_2020")) |>
+  cols_label(
+    country = "Country",
+    hdpe_2019 = "HDPE", ldpe_2019 = "LDPE", o_2019 = "Other",
+    pet_2019 = "PET", pp_2019 = "PP", ps_2019 = "PS", pvc_2019 = "PVC",
+    total_plastic_2019 = "Total Plastic",
+    hdpe_2020 = "HDPE", ldpe_2020 = "LDPE", o_2020 = "Other",
+    pet_2020 = "PET", pp_2020 = "PP", ps_2020 = "PS", pvc_2020 = "PVC",
+    total_plastic_2020 = "Total Plastic"
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_source_note("Source: Break Free From Plastic brand audit data (2019-2020)") |>
+  fmt_number(columns = ends_with("_2019") | ends_with("_2020"), decimals = 2)
+```
+:::
+
+# Air Quality & Plastic {orientation="rows"}
+
+## Column {width="55%"}
+
+### Plastic Waste and Air Quality Across Countries
+
+
+```{r}
+country_data <- read_csv("concap.csv")
+
+capitals <- country_data |>
+  select(c(1:4)) |>
+  rename("country" = "CountryName", 
+         "capital_city" = "CapitalName",
+         "capital_lat" = "CapitalLatitude",
+         "capital_long" = "CapitalLongitude"
+         )
+  
+pollution_data <- left_join(plastics, capitals, by = "country")
+
+air_data <- read_csv(file = "air_data.csv")
+
+pollution_data <- left_join(pollution_data, air_data, by = "country")
+
+air_vs_plastic <- pollution_data |>
+  filter(!parent_company %in% c("Grand Total", "Unbranded", "null", "NULL")) |>
+  group_by(country) |>
+  summarize(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    total_volunteers = sum(volunteers, na.rm = TRUE),
+    avg_aqi = mean(overall_aqi, na.rm = TRUE)) |>
+  filter(!is.na(avg_aqi), total_plastic > 0) |>
+  arrange(desc(total_plastic))
+
+Q1 <- quantile(air_vs_plastic$total_plastic, 0.25)
+Q3 <- quantile(air_vs_plastic$total_plastic, 0.75)
+IQR <- Q3 - Q1
+
+air_vs_plastic_clean <- air_vs_plastic |>
+  filter(
+    total_plastic >= Q1 - 1.5 * IQR,
+    total_plastic <= Q3 + 1.5 * IQR
+  )
+
+air_vs_plastic_clean |>
+  mutate(aqi_category = case_when(
+    avg_aqi <= 50  ~ "Good",
+    avg_aqi <= 100 ~ "Moderate",
+    avg_aqi <= 150 ~ "Unhealthy for Sensitive Groups",
+    TRUE           ~ "Unhealthy"
+  )) |>
+  ggplot(aes(x = total_plastic, y = avg_aqi, size = total_plastic, color = aqi_category)) +
+  geom_point(alpha = 0.7) +
+  ggrepel::geom_text_repel(
+    aes(label = country),
+    size = 2.5,
+    max.overlaps = 10
+  ) +
+  scale_size_continuous(range = c(2, 12)) +
+  scale_color_manual(values = c(
+    "Good" = "darkgreen",
+    "Moderate" = "gold",
+    "Unhealthy for Sensitive Groups" = "orange",
+    "Unhealthy" = "red"
+  )) +
+  labs(
+    title = "Plastic Waste and Air Quality Across Countries",
+    subtitle = "Bubble size reflects total plastic waste. Color reflects AQI category",
+    x = "Total Plastic Waste",
+    y = "Average AQI",
+    color = "AQI Category",
+    alt = "Bubble plot where each bubble is a country. Bubble size represents total plastic waste and color represents air quality category."
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial"),
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  ) +
+  guides(size = "none")
+```
+
+### Association between Plastic Waste and Air Quality
+
+```{r}
+Q1 <- quantile(air_vs_plastic$total_plastic, 0.25)
+Q3 <- quantile(air_vs_plastic$total_plastic, 0.75)
+IQR <- Q3 - Q1
+
+ggplot(data = air_vs_plastic |> 
+         filter(
+           total_plastic >= Q1 - 1.5 * IQR, 
+           total_plastic <= Q3 + 1.5 * IQR), 
+       aes(x = total_plastic, y = avg_aqi)
+       ) +
+  geom_point(aes(color = avg_aqi), size = 3, alpha = 0.7, color = "darkgreen") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(
+    title = "Association between Plastic Waste and Air Quality across Countries",
+    subtitle = "Each point represents one country. The red line shows the linear trend",
+    x = "Total Plastic Waste",
+    y = "Average Air Quality Index (AQI)",
+    alt = "Scatter plot showing the relationship between total plastic waste and average air quality index    across countries. Each point represents a country. A red linear trend line slopes slightly downward, showing  a weak negative relationship between plastic waste and air quality."
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial"),
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(colour = "black", size = 11),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+  )
+```
+
+## Column {width="45%"}
+
+### Air Quality Analysis
+
+::: panel-tabset
+## Top 10 Countries
+
+```{r}
+air_vs_plastic |>
+  slice_max(total_plastic, n = 10)
+```
+
+## AQI by Plastic Level
+
+Table 3: groups countries into four quartiles based on their total plastic waste, from lowest (Q1) to highest (Q4)
+
+```{r}
+air_vs_plastic_clean |>
+  mutate(
+    plastic_quartile = case_when(
+      total_plastic <= quantile(total_plastic, 0.25) ~ "Low (Q1)",
+      total_plastic <= quantile(total_plastic, 0.50) ~ "Medium-Low (Q2)",
+      total_plastic <= quantile(total_plastic, 0.75) ~ "Medium-High (Q3)",
+      TRUE                                           ~ "High (Q4)"
+    ),
+    plastic_quartile = factor(plastic_quartile, levels = c("Low (Q1)", "Medium-Low (Q2)", "Medium-High (Q3)", "High (Q4)"))
+  ) |>
+  group_by(plastic_quartile) |>
+  summarise(
+    n_countries = n(),
+    avg_aqi = round(mean(avg_aqi, na.rm = TRUE), 2),
+    min_aqi = round(min(avg_aqi, na.rm = TRUE), 2),
+    max_aqi = round(max(avg_aqi, na.rm = TRUE), 2)
+  ) |>
+  gt() |>
+  opt_table_font(font = "Arial") |>
+  tab_header(
+    title = "Air Quality by Plastic Waste Level",
+    subtitle = "Countries grouped into quartiles by total plastic waste"
+  ) |>
+  cols_label(
+    plastic_quartile = "Plastic Waste Group",
+    n_countries = "Number of Countries",
+    avg_aqi = "Average AQI",
+    min_aqi = "Minimum AQI",
+    max_aqi = "Maximum AQI"
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  data_color(
+    columns = avg_aqi,
+    colors = scales::col_numeric(
+      palette = c("darkgreen", "yellow", "red"),
+      domain = NULL
+    )
+  ) |>
+  tab_source_note("Note: Higher AQI indicates worse air quality. Countries filtered to remove outliers.")
+```
+
+## Best vs Worst Air Quality
+
+Table 4: compares the 5 countries with the best air quality against the 5 countries with the worst air quality
+
+```{r}
+top_aqi <- air_vs_plastic_clean |>
+  arrange(desc(avg_aqi)) |>
+  head(5) |>
+  mutate(group = "Worst Air Quality")
+
+bottom_aqi <- air_vs_plastic_clean |>
+  arrange(avg_aqi) |>
+  head(5) |>
+  mutate(group = "Best Air Quality")
+
+bind_rows(top_aqi, bottom_aqi) |>
+  select(group, country, avg_aqi, total_plastic) |>
+  gt(groupname_col = "group") |>
+  opt_table_font(font = "Arial") |>
+  tab_header(
+    title = "Best vs Worst Air Quality Countries",
+    subtitle = "Do countries with the worst air quality also have the most plastic waste?"
+  ) |>
+  cols_label(
+    country = "Country",
+    avg_aqi = "Average AQI",
+    total_plastic = "Total Plastic Waste"
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold", color = "red"),
+    locations = cells_row_groups()
+  ) |>
+  fmt_number(columns = c(avg_aqi, total_plastic), decimals = 2) |>
+  tab_source_note("Note: Top and bottom 5 countries ranked by average AQI across 2019-2020.")
+```
+
+## Model Results
+
+Table 5: table shows the results of a linear regression model predicting average AQI from total plastic waste across countries
+
+```{r}
+model <- lm(avg_aqi ~ total_plastic, data = air_vs_plastic)
+summary_model <- summary(model)
+
+r_squared <- round(summary_model$r.squared, 4)
+adj_r_squared <- round(summary_model$adj.r.squared, 4)
+f_stat <- round(summary_model$fstatistic[1], 3)
+p_value_model <- round(pf(summary_model$fstatistic[1], 
+                          summary_model$fstatistic[2], 
+                          summary_model$fstatistic[3], 
+                          lower.tail = FALSE), 4)
+
+data.frame(
+  Term = c("Intercept", "Total Plastic"),
+  Estimate = coef(model),
+  Standard_Error = summary_model$coefficients[, 2],
+  T_Statistic = summary_model$coefficients[, 3],
+  P_Value = summary_model$coefficients[, 4]
+) |>
+  gt() |>
+  opt_table_font(font = "Arial") |>
+  tab_header(
+    title = "Linear Regression Results",
+    subtitle = "Predicting Average AQI from Total Plastic Waste by Country"
+  ) |>
+  tab_spanner(
+    label = "Coefficient Information",
+    columns = c(Estimate, Standard_Error)
+  ) |>
+  tab_spanner(
+    label = "Test Statistics",
+    columns = c(T_Statistic, P_Value)
+  ) |>
+  cols_label(
+    Term = "Term",
+    Estimate = "Estimate",
+    Standard_Error = "Standard Error",
+    T_Statistic = "T-Statistic",
+    P_Value = "P-Value"
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  fmt_number(columns = c(Estimate, Standard_Error, T_Statistic), decimals = 3) |>
+  fmt_number(columns = P_Value, decimals = 4) |>
+  tab_source_note(glue::glue("R² = {r_squared} | Adjusted R² = {adj_r_squared} | F-statistic = {f_stat} | Model p-value = {p_value_model}"))
+```
+:::
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
